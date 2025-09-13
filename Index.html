@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kölsche Kneipen</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <!-- Supabase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.0/umd/supabase.min.js"></script>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --success-color: #00d4aa;
+            --warning-color: #ffb800;
+            --danger-color: #ff6b6b;
+            --dark-bg: #1a1a2e;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--primary-gradient);
+            min-height: 100vh;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            padding: 0.75rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            color: white;
+            font-size: 0.8rem;
+        }
+
+        .status-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--danger-color);
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: var(--success-color);
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: var(--secondary-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--glass-bg);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .main-content {
+            padding: 1rem 0;
+        }
+
+        .view-container {
+            display: none;
+        }
+
+        .view-container.active {
+            display: block;
+        }
+
+        .map-container {
+            height: 70vh;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .map-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .kneipen-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .kneipe-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kneipe-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--secondary-gradient);
+        }
+
+        .kneipe-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        .kneipe-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 15px;
+            margin-bottom: 1rem;
+            transition: transform 0.3s ease;
+        }
+
+        .kneipe-card:hover .kneipe-image {
+            transform: scale(1.05);
+        }
+
+        .kneipe-name {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .kneipe-address {
+            color: #7f8c8d;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .ranking-section {
+            margin: 1rem 0;
+        }
+
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+        }
+
+        .ranking-label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .stars {
+            display: flex;
+            gap: 2px;
+        }
+
+        .star {
+            color: #ddd;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .star.active {
+            color: #ffd700;
+        }
+
+        .icon-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+        }
+
+        .icon-yes {
+            color: var(--success-color);
+        }
+
+        .icon-no {
+            color: var(--danger-color);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            position: relative;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .close {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            font-size: 2rem;
+            cursor: pointer;
+            color: #7f8c8d;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: var(--danger-color);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .ranking-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .ranking-control {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 10px;
+        }
+
+        .toggle-button {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .toggle-button:hover {
+            background: #e9ecef;
+        }
+
+        .toggle-button.active {
+            background: rgba(0, 212, 170, 0.1);
+            border-color: var(--success-color);
+        }
+
+        .stats-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 15px;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            min-width: 150px;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 800;
+            background: var(--secondary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .search-bar {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 15px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            background: transparent;
+            font-size: 1.1rem;
+            outline: none;
+        }
+
+        .search-input::placeholder {
+            color: #7f8c8d;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 2rem;
+            color: white;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .setup-banner {
+            background: linear-gradient(135deg, #ff6b6b, #ffa500);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .setup-banner h3 {
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .setup-banner p {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .setup-banner button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 0.5rem;
+            }
+
+            .header {
+                padding: 0.5rem 0;
+            }
+
+            .header-content {
+                gap: 0.5rem;
+            }
+
+            .logo {
+                font-size: 1.2rem;
+            }
+
+            .connection-status {
+                font-size: 0.7rem;
+                gap: 0.2rem;
+            }
+
+            .nav-buttons {
+                gap: 0.3rem;
+                width: 100%;
+                justify-content: center;
+            }
+
+            .btn {
+                padding: 0.4rem 0.7rem;
+                font-size: 0.7rem;
+                gap: 0.2rem;
+            }
+
+            .kneipen-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .modal {
+                padding: 0.5rem;
+            }
+
+            .modal-content {
+                margin: 0.5rem auto;
+                padding: 1rem;
+            }
+
+            .ranking-controls {
+                grid-template-columns: 1fr;
+            }
+
+            .map-container {
+                height: 50vh;
+            }
+
+            .stats-container {
+                margin-bottom: 1rem;
+            }
+
+            .stat-card {
+                padding: 1rem 1.5rem;
+            }
+
+            .main-content {
+                padding: 0.5rem 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header-content {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+                gap: 0.5rem;
+            }
+
+            .nav-buttons {
+                order: 2;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .logo {
+                font-size: 1.1rem;
+                order: 1;
+            }
+
+            .connection-status {
+                order: 1;
+                justify-content: center;
+                font-size: 0.6rem;
+            }
+
+            .btn {
+                flex: 1;
+                min-width: calc(20% - 0.3rem);
+                justify-content: center;
+                padding: 0.3rem 0.4rem;
+            }
+
+            .stats-container {
+                justify-content: center;
+            }
+        }
+
+        /* Animation Classes */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="header-content">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div class="logo">🍺 Kölsche Kneipen</div>
+                    <div class="connection-status">
+                        <div class="status-indicator" id="connectionStatus"></div>
+                        <span id="connectionText">Verbindung...</span>
+                    </div>
+                </div>
+                <nav class="nav-buttons">
+                    <button class="btn btn-secondary active" onclick="showView('map')" id="mapBtn">
+                        🗺️ Karte
+                    </button>
+                    <button class="btn btn-secondary" onclick="showView('koelsch')" id="koelschBtn">
+                        🍺 Kölsch
+                    </button>
+                    <button class="btn btn-secondary" onclick="showView('loeffe')" id="loeffeBtn">
+                        🟠 Löffe
+                    </button>
+                    <button class="btn btn-secondary" onclick="showView('guinness')" id="guinnessBtn">
+                        ⚫ Guinness
+                    </button>
+                    <button class="btn btn-primary" onclick="openAddModal()" id="addKneipenBtn" disabled>
+                        ➕
+                    </button>
+                    <button class="btn btn-secondary" onclick="showSetupModal()">
+                        ⚙️
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div class="container main-content">
+        <!-- Setup Banner -->
+        <div class="setup-banner" id="setupBanner">
+            <h3>🔧 Supabase Setup erforderlich</h3>
+            <p>Konfigurieren Sie Ihre Supabase-Verbindung, um die volle Funktionalität zu nutzen.</p>
+            <button onclick="showSetupModal()">Jetzt einrichten</button>
+        </div>
+
+        <!-- Stats Container - NUR EINE KARTE -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-number" id="totalKneipen">0</div>
+                <div class="stat-label">Kneipen</div>
+            </div>
+        </div>
+
+        <!-- Map View -->
+        <div class="view-container active" id="mapView">
+            <div class="map-container">
+                <div id="map"></div>
+                <div class="map-controls">
+                    <button class="btn btn-secondary" onclick="centerMapOnCologne()">
+                        🎯 Köln
+                    </button>
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        🔄
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kölsch List View -->
+        <div class="view-container" id="koelschView">
+            <div class="search-bar">
+                <input type="text" class="search-input" id="searchInputKoelsch" placeholder="🔍 Kölsch-Kneipe suchen...">
+            </div>
+            <div class="kneipen-grid" id="koelschGrid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Lade Kölsch-Kneipen...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Löffe List View -->
+        <div class="view-container" id="loeffeView">
+            <div class="search-bar">
+                <input type="text" class="search-input" id="searchInputLoeffe" placeholder="🔍 Löffe-Kneipe suchen...">
+            </div>
+            <div class="kneipen-grid" id="loeffeGrid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Lade Löffe-Kneipen...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guinness List View -->
+        <div class="view-container" id="guinnessView">
+            <div class="search-bar">
+                <input type="text" class="search-input" id="searchInputGuinness" placeholder="🔍 Guinness-Kneipe suchen...">
+            </div>
+            <div class="kneipen-grid" id="guinnessGrid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Lade Guinness-Kneipen...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Setup Modal -->
+    <div class="modal" id="setupModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeSetupModal()">&times;</span>
+            <h2>🔧 Supabase Setup</h2>
+            <p style="margin-bottom: 2rem; color: #7f8c8d;">
+                Verbinden Sie Ihre Supabase-Datenbank für echte Datenpersistenz.
+            </p>
+            
+            <div class="form-group">
+                <label class="form-label">Supabase URL *</label>
+                <input type="url" class="form-input" id="supabaseUrl" 
+                       placeholder="https://ihre-projekt-id.supabase.co">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Supabase Anon Key *</label>
+                <input type="text" class="form-input" id="supabaseKey" 
+                       placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+            </div>
+
+            <div style="margin-top: 2rem; text-align: right;">
+                <button type="button" class="btn btn-secondary" onclick="closeSetupModal()" style="margin-right: 1rem;">
+                    Abbrechen
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveSupabaseConfig()">
+                    Verbindung testen & speichern
+                </button>
+            </div>
+
+            <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 10px;">
+                <h4>📝 Anleitung:</h4>
+                <ol style="margin-left: 1rem; color: #666;">
+                    <li>Gehen Sie zu <a href="https://supabase.com" target="_blank">supabase.com</a></li>
+                    <li>Erstellen Sie ein neues Projekt</li>
+                    <li>Gehen Sie zu Settings → API</li>
+                    <li>Kopieren Sie URL und anon public key hierher</li>
+                    <li>Führen Sie das SQL-Script aus (siehe GitHub README)</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal" id="kneipenModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Kneipe hinzufügen</h2>
+            
+            <form id="kneipenForm">
+                <div class="form-group">
+                    <label class="form-label">Name der Kneipe *</label>
+                    <input type="text" class="form-input" id="kneipeName" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Adresse *</label>
+                    <input type="text" class="form-input" id="kneipeAddress" required placeholder="Musterstraße 1, 50667 Köln">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bild-URL</label>
+                    <input type="url" class="form-input" id="imageUrl" placeholder="https://example.com/bild.jpg">
+                    <small style="color: #7f8c8d; margin-top: 0.5rem; display: block;">
+                        Tipp: Laden Sie Bilder zu imgur.com hoch und kopieren Sie den direkten Link
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Beschreibung</label>
+                    <textarea class="form-input form-textarea" id="kneipeDescription" placeholder="Beschreibung der Kneipe..."></textarea>
+                </div>
+
+                <div class="ranking-controls">
+                    <div class="ranking-control">
+                        <label class="form-label">Kölschsorte</label>
+                        <input type="text" class="form-input" id="koelschsorte" placeholder="z.B. Reissdorf, Gaffel, Früh...">
+                    </div>
+
+                    <div class="ranking-control">
+                        <label class="form-label">Kölschpreis (€)</label>
+                        <input type="number" class="form-input" id="koelschpreis" step="0.01" placeholder="2.50">
+                    </div>
+
+                    <div class="ranking-control">
+                        <label class="form-label">Geschmack (1-5 Sterne)</label>
+                        <div class="stars" data-rating="geschmack">
+                            <span class="star" data-value="1">⭐</span>
+                            <span class="star" data-value="2">⭐</span>
+                            <span class="star" data-value="3">⭐</span>
+                            <span class="star" data-value="4">⭐</span>
+                            <span class="star" data-value="5">⭐</span>
+                        </div>
+                    </div>
+
+                    <div class="ranking-control">
+                        <label class="form-label">Musik (1-5 Sterne)</label>
+                        <div class="stars" data-rating="musik">
+                            <span class="star" data-value="1">⭐</span>
+                            <span class="star" data-value="2">⭐</span>
+                            <span class="star" data-value="3">⭐</span>
+                            <span class="star" data-value="4">⭐</span>
+                            <span class="star" data-value="5">⭐</span>
+                        </div>
+                    </div>
+
+                    <div class="ranking-control">
+                        <label class="form-label">Cuervo vorhanden?</label>
+                        <div class="toggle-button" data-toggle="cuervo" data-value="false">
+                            <span class="icon">❌</span>
+                            <span class="text">Nein</span>
+                        </div>
+                    </div>
+
+                    <div class="ranking-control">
+                        <label class="form-label">Löffe vom Fass?</label>
+                        <div class="toggle-button" data-toggle="loeffe" data-value="false">
+                            <span class="icon">❌</span>
+                            <span class="text">Nein</span>
+                        </div>
+                    </div>
+
+                    <div class="ranking-control">
+                        <label class="form-label">Guinness vom Fass?</label>
+                        <div class="toggle-button" data-toggle="guinness" data-value="false">
+                            <span class="icon">❌</span>
+                            <span class="text">Nein</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem; text-align: right;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()" style="margin-right: 1rem;">
+                        Abbrechen
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="loading-spinner" id="saveSpinner" style="display: none;"></span>
+                        <span id="saveButtonText">Speichern</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        // Globale Variablen
+        let supabase = null;
+        let kneipen = [];
+        let map = null;
+        let markers = [];
+        let currentEditId = null;
+        let isConnected = false;
+        let currentView = 'map';
+
+        // Custom Marker Icons
+        let koelschIcon, loeffeIcon, guinnessIcon, multiIcon;
+
+        // Ratings Storage
+        let ratings = {
+            geschmack: 0,
+            musik: 0
+        };
+
+        let toggles = {
+            cuervo: false,
+            loeffe: false,
+            guinness: false
+        };
+
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            createCustomIcons();
+            loadSupabaseConfig();
+            setupEventListeners();
+        });
+
+        function createCustomIcons() {
+            // Kölsch Icon (Gelb)
+            koelschIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="
+                    background: linear-gradient(135deg, #ffd700, #ffed4e);
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    width: 35px;
+                    height: 35px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 18px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                    cursor: pointer;
+                ">🍺</div>`,
+                iconSize: [35, 35],
+                iconAnchor: [17, 17]
+            });
+
+            // Löffe Icon (Orange)
+            loeffeIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="
+                    background: linear-gradient(135deg, #ff6b35, #ff8c42);
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    width: 35px;
+                    height: 35px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 18px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                    cursor: pointer;
+                ">🍺</div>`,
+                iconSize: [35, 35],
+                iconAnchor: [17, 17]
+            });
+
+            // Guinness Icon (Schwarz)
+            guinnessIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="
+                    background: linear-gradient(135deg, #2c3e50, #34495e);
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    width: 35px;
+                    height: 35px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 18px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                    cursor: pointer;
+                    color: white;
+                ">🍺</div>`,
+                iconSize: [35, 35],
+                iconAnchor: [17, 17]
+            });
+
+            // Multi Icon für Kneipen mit mehreren Angeboten (Regenbogen)
+            multiIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="
+                    background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c);
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    width: 40px;
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 20px;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                    cursor: pointer;
+                    animation: pulse 2s infinite;
+                ">🍻</div>`,
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+        }
+
+        function loadSupabaseConfig() {
+            // Versuche gespeicherte Konfiguration zu laden
+            const savedUrl = localStorage.getItem('supabase_url');
+            const savedKey = localStorage.getItem('supabase_key');
+            
+            if (savedUrl && savedKey) {
+                initializeSupabase(savedUrl, savedKey);
+            } else {
+                updateConnectionStatus(false, 'Setup erforderlich');
+            }
+        }
+
+        async function initializeSupabase(url, key) {
+            try {
+                updateConnectionStatus(false, 'Verbinde...');
+                
+                supabase = window.supabase.createClient(url, key);
+                
+                // Test connection
+                const { data, error } = await supabase.from('kneipen').select('count', { count: 'exact', head: true });
+                
+                if (error) {
+                    throw error;
+                }
+                
+                isConnected = true;
+                updateConnectionStatus(true, 'Verbunden');
+                hideSetupBanner();
+                enableInterface();
+                await loadKneipen();
+                
+            } catch (error) {
+                console.error('Supabase connection error:', error);
+                updateConnectionStatus(false, 'Verbindungsfehler');
+                showNotification('❌ Supabase-Verbindung fehlgeschlagen: ' + error.message, 'error');
+            }
+        }
+
+        function updateConnectionStatus(connected, text) {
+            const indicator = document.getElementById('connectionStatus');
+            const textElement = document.getElementById('connectionText');
+            
+            indicator.classList.toggle('connected', connected);
+            textElement.textContent = text;
+            
+            isConnected = connected;
+        }
+
+        function hideSetupBanner() {
+            const banner = document.getElementById('setupBanner');
+            if (banner) {
+                banner.style.display = 'none';
+            }
+        }
+
+        function enableInterface() {
+            document.getElementById('addKneipenBtn').disabled = false;
+        }
+
+        function initializeMap() {
+            const cologneCoords = [50.9375, 6.9603];
+            
+            map = L.map('map', {
+                center: cologneCoords,
+                zoom: 12,
+                zoomControl: false
+            });
+
+            L.control.zoom({
+                position: 'topright'
+            }).addTo(map);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+
+            map.getContainer().style.filter = 'hue-rotate(220deg) saturate(1.2)';
+        }
+
+        function setupEventListeners() {
+            // Modal Event Listeners
+            const modal = document.getElementById('kneipenModal');
+            const closeBtn = modal.querySelector('.close');
+            
+            closeBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+
+            // Form Event Listeners
+            document.getElementById('kneipenForm').addEventListener('submit', handleFormSubmit);
+
+            // Star Ratings
+            document.querySelectorAll('.stars').forEach(setupStarRating);
+
+            // Toggle Buttons
+            document.querySelectorAll('.toggle-button').forEach(setupToggleButton);
+
+            // Search Event Listeners für alle Views
+            document.getElementById('searchInputKoelsch').addEventListener('input', () => handleSearch('koelsch'));
+            document.getElementById('searchInputLoeffe').addEventListener('input', () => handleSearch('loeffe'));
+            document.getElementById('searchInputGuinness').addEventListener('input', () => handleSearch('guinness'));
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && modal.style.display === 'block') {
+                    closeModal();
+                }
+                if (e.ctrlKey && e.key === 'k') {
+                    e.preventDefault();
+                    const activeSearchInput = document.querySelector(`#searchInput${currentView.charAt(0).toUpperCase() + currentView.slice(1)}`);
+                    if (activeSearchInput) activeSearchInput.focus();
+                }
+            });
+        }
+
+        function setupStarRating(starsContainer) {
+            const stars = starsContainer.querySelectorAll('.star');
+            const ratingType = starsContainer.dataset.rating;
+            
+            stars.forEach((star, index) => {
+                star.addEventListener('click', () => {
+                    const rating = index + 1;
+                    ratings[ratingType] = rating;
+                    updateStarDisplay(starsContainer, rating);
+                });
+                
+                star.addEventListener('mouseover', () => {
+                    updateStarDisplay(starsContainer, index + 1, true);
+                });
+            });
+            
+            starsContainer.addEventListener('mouseleave', () => {
+                updateStarDisplay(starsContainer, ratings[ratingType]);
+            });
+        }
+
+        function updateStarDisplay(container, rating, isHover = false) {
+            const stars = container.querySelectorAll('.star');
+            stars.forEach((star, index) => {
+                if (index < rating) {
+                    star.style.color = isHover ? '#ffed4e' : '#ffd700';
+                } else {
+                    star.style.color = '#ddd';
+                }
+            });
+        }
+
+        function setupToggleButton(button) {
+            const toggleType = button.dataset.toggle;
+            
+            button.addEventListener('click', () => {
+                const currentValue = toggles[toggleType];
+                toggles[toggleType] = !currentValue;
+                updateToggleDisplay(button, !currentValue);
+            });
+        }
+
+        function updateToggleDisplay(button, value) {
+            const icon = button.querySelector('.icon');
+            const text = button.querySelector('.text');
+            
+            if (value) {
+                button.classList.add('active');
+                icon.textContent = '✅';
+                text.textContent = 'Ja';
+            } else {
+                button.classList.remove('active');
+                icon.textContent = '❌';
+                text.textContent = 'Nein';
+            }
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            if (!isConnected) {
+                showNotification('❌ Keine Datenbankverbindung', 'error');
+                return;
+            }
+            
+            const saveButton = e.target.querySelector('button[type="submit"]');
+            const spinner = document.getElementById('saveSpinner');
+            const buttonText = document.getElementById('saveButtonText');
+            
+            // Loading state
+            saveButton.disabled = true;
+            spinner.style.display = 'inline-block';
+            buttonText.textContent = 'Speichere...';
+
+            try {
+                const formData = collectFormData();
+                
+                if (currentEditId) {
+                    await updateKneipe(currentEditId, formData);
+                } else {
+                    await addKneipe(formData);
+                }
+                
+                closeModal();
+                await loadKneipen();
+                updateMapMarkers();
+                updateStats();
+                
+            } catch (error) {
+                showNotification('❌ Fehler beim Speichern: ' + error.message, 'error');
+            } finally {
+                // Reset loading state
+                saveButton.disabled = false;
+                spinner.style.display = 'none';
+                buttonText.textContent = 'Speichern';
+            }
+        }
+
+        function collectFormData() {
+            return {
+                name: document.getElementById('kneipeName').value.trim(),
+                address: document.getElementById('kneipeAddress').value.trim(),
+                description: document.getElementById('kneipeDescription').value.trim() || null,
+                image_url: document.getElementById('imageUrl').value.trim() || null,
+                koelschsorte: document.getElementById('koelschsorte').value.trim() || null,
+                koelschpreis: parseFloat(document.getElementById('koelschpreis').value) || null,
+                geschmack_rating: ratings.geschmack || null,
+                musik_rating: ratings.musik || null,
+                has_cuervo: toggles.cuervo || false,
+                has_loeffe: toggles.loeffe || false,
+                has_guinness: toggles.guinness || false
+            };
+        }
+
+        async function addKneipe(kneipenData) {
+            // Geocode address
+            try {
+                const coords = await geocodeAddress(kneipenData.address);
+                kneipenData.latitude = coords[0];
+                kneipenData.longitude = coords[1];
+            } catch (error) {
+                console.warn('Geocoding failed:', error);
+                // Use default Cologne coordinates
+                kneipenData.latitude = 50.9375;
+                kneipenData.longitude = 6.9603;
+            }
+            
+            const { data, error } = await supabase
+                .from('kneipen')
+                .insert([kneipenData])
+                .select();
+            
+            if (error) {
+                throw error;
+            }
+            
+            showNotification('✅ Kneipe erfolgreich hinzugefügt!', 'success');
+        }
+
+        async function updateKneipe(id, kneipenData) {
+            // Get existing kneipe for coordinate handling
+            const { data: existingData } = await supabase
+                .from('kneipen')
+                .select('address, latitude, longitude')
+                .eq('id', id)
+                .single();
+            
+            // Only geocode if address changed
+            if (existingData && existingData.address !== kneipenData.address) {
+                try {
+                    const coords = await geocodeAddress(kneipenData.address);
+                    kneipenData.latitude = coords[0];
+                    kneipenData.longitude = coords[1];
+                } catch (error) {
+                    console.warn('Geocoding failed:', error);
+                    // Keep existing coordinates
+                    kneipenData.latitude = existingData.latitude;
+                    kneipenData.longitude = existingData.longitude;
+                }
+            }
+            
+            kneipenData.updated_at = new Date().toISOString();
+            
+            const { error } = await supabase
+                .from('kneipen')
+                .update(kneipenData)
+                .eq('id', id);
+            
+            if (error) {
+                throw error;
+            }
+            
+            showNotification('✅ Kneipe erfolgreich aktualisiert!', 'success');
+        }
+
+        async function deleteKneipe(id) {
+            if (!confirm('Möchten Sie diese Kneipe wirklich löschen?')) {
+                return;
+            }
+            
+            if (!isConnected) {
+                showNotification('❌ Keine Datenbankverbindung', 'error');
+                return;
+            }
+            
+            try {
+                const { error } = await supabase
+                    .from('kneipen')
+                    .delete()
+                    .eq('id', id);
+                
+                if (error) {
+                    throw error;
+                }
+                
+                await loadKneipen();
+                updateMapMarkers();
+                updateStats();
+                showNotification('🗑️ Kneipe gelöscht', 'warning');
+                
+            } catch (error) {
+                showNotification('❌ Fehler beim Löschen: ' + error.message, 'error');
+            }
+        }
+
+        async function geocodeAddress(address) {
+            const encodedAddress = encodeURIComponent(address + ', Köln, Deutschland');
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`);
+            const data = await response.json();
+            
+            if (data.length > 0) {
+                return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+            } else {
+                throw new Error('Address not found');
+            }
+        }
+
+        async function loadKneipen() {
+            if (!isConnected) {
+                // Leere alle Grids
+                ['koelschGrid', 'loeffeGrid', 'guinnessGrid'].forEach(gridId => {
+                    const grid = document.getElementById(gridId);
+                    if (grid) grid.innerHTML = '';
+                });
+                return;
+            }
+            
+            try {
+                const { data, error } = await supabase
+                    .from('kneipen')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) {
+                    throw error;
+                }
+                
+                kneipen = data || [];
+                
+                // Render alle Views
+                renderKneipen('koelsch');
+                renderKneipen('loeffe');
+                renderKneipen('guinness');
+                
+                updateMapMarkers();
+                updateStats();
+                
+            } catch (error) {
+                console.error('Error loading kneipen:', error);
+                showNotification('❌ Fehler beim Laden der Daten: ' + error.message, 'error');
+            }
+        }
+
+        function renderKneipen(view = currentView, filteredKneipen = null) {
+            let targetGrid, emptyMessage, kneipesToShow;
+            
+            if (!filteredKneipen) {
+                // Filter basierend auf der aktuellen View
+                switch(view) {
+                    case 'koelsch':
+                        kneipesToShow = kneipen.filter(k => !k.has_loeffe && !k.has_guinness);
+                        break;
+                    case 'loeffe':
+                        kneipesToShow = kneipen.filter(k => k.has_loeffe);
+                        break;
+                    case 'guinness':
+                        kneipesToShow = kneipen.filter(k => k.has_guinness);
+                        break;
+                    default:
+                        kneipesToShow = kneipen;
+                }
+            } else {
+                kneipesToShow = filteredKneipen;
+            }
+
+            // Grid-Element auswählen
+            switch(view) {
+                case 'koelsch':
+                    targetGrid = document.getElementById('koelschGrid');
+                    emptyMessage = 'Noch keine Kölsch-Kneipen vorhanden';
+                    break;
+                case 'loeffe':
+                    targetGrid = document.getElementById('loeffeGrid');
+                    emptyMessage = 'Noch keine Löffe-Kneipen vorhanden';
+                    break;
+                case 'guinness':
+                    targetGrid = document.getElementById('guinnessGrid');
+                    emptyMessage = 'Noch keine Guinness-Kneipen vorhanden';
+                    break;
+                default:
+                    return;
+            }
+
+            targetGrid.innerHTML = '';
+
+            if (kneipesToShow.length === 0) {
+                targetGrid.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #7f8c8d;">
+                        <h3>${emptyMessage}</h3>
+                        <p>Fügen Sie Ihre erste Kneipe hinzu!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            kneipesToShow.forEach(kneipe => {
+                const card = createKneipenCard(kneipe);
+                targetGrid.appendChild(card);
+            });
+        }
+
+        function createKneipenCard(kneipe) {
+            const card = document.createElement('div');
+            card.className = 'kneipe-card fade-in';
+            
+            card.innerHTML = `
+                ${kneipe.image_url ? `<img src="${kneipe.image_url}" alt="${kneipe.name}" class="kneipe-image" onerror="this.style.display='none'">` : ''}
+                
+                <div class="kneipe-name">${kneipe.name}</div>
+                <div class="kneipe-address">📍 ${kneipe.address}</div>
+                
+                ${kneipe.description ? `<p style="margin-bottom: 1rem; color: #555;">${kneipe.description}</p>` : ''}
+                
+                <div class="ranking-section">
+                    <div class="ranking-item">
+                        <span class="ranking-label">Kölschsorte:</span>
+                        <span style="font-weight: bold; color: #667eea;">${kneipe.koelschsorte || '-'}</span>
+                    </div>
+                    
+                    <div class="ranking-item">
+                        <span class="ranking-label">Preis:</span>
+                        <span style="font-weight: bold; color: #f5576c;">${kneipe.koelschpreis ? kneipe.koelschpreis.toFixed(2) + '€' : '-'}</span>
+                    </div>
+                    
+                    <div class="ranking-item">
+                        <span class="ranking-label">Geschmack:</span>
+                        <div class="stars">
+                            ${'⭐'.repeat(kneipe.geschmack_rating || 0)}${'☆'.repeat(5 - (kneipe.geschmack_rating || 0))}
+                        </div>
+                    </div>
+                    
+                    <div class="ranking-item">
+                        <span class="ranking-label">Musik:</span>
+                        <div class="stars">
+                            ${'⭐'.repeat(kneipe.musik_rating || 0)}${'☆'.repeat(5 - (kneipe.musik_rating || 0))}
+                        </div>
+                    </div>
+                    
+                    <div class="ranking-item">
+                        <span class="ranking-label">Cuervo:</span>
+                        <span class="icon-indicator ${kneipe.has_cuervo ? 'icon-yes' : 'icon-no'}">
+                            ${kneipe.has_cuervo ? '✅' : '❌'}
+                        </span>
+                    </div>
+                    
+                    <div class="ranking-item">
+                        <span class="ranking-label">Löffe vom Fass:</span>
+                        <span class="icon-indicator ${kneipe.has_loeffe ? 'icon-yes' : 'icon-no'}">
+                            ${kneipe.has_loeffe ? '✅' : '❌'}
+                        </span>
+                    </div>
+                    
+                    <div class="ranking-item">
+                        <span class="ranking-label">Guinness vom Fass:</span>
+                        <span class="icon-indicator ${kneipe.has_guinness ? 'icon-yes' : 'icon-no'}">
+                            ${kneipe.has_guinness ? '✅' : '❌'}
+                        </span>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button class="btn btn-secondary" onclick="editKneipe(${kneipe.id})" style="flex: 1;">
+                        ✏️ Bearbeiten
+                    </button>
+                    <button class="btn btn-secondary" onclick="showOnMap(${kneipe.id})" style="flex: 1;">
+                        🗺️ Auf Karte
+                    </button>
+                    <button class="btn" onclick="deleteKneipe(${kneipe.id})" 
+                            style="background: var(--danger-color); color: white; padding: 0.75rem;">
+                        🗑️
+                    </button>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        function calculateAverageRating(kneipe) {
+            const ratings = [kneipe.geschmack_rating, kneipe.musik_rating].filter(r => r > 0);
+            return ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+        }
+
+        function updateMapMarkers() {
+            // Clear existing markers
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+
+            // Add new markers
+            kneipen.forEach(kneipe => {
+                if (kneipe.latitude && kneipe.longitude) {
+                    // Bestimme Icon basierend auf den Angeboten
+                    let icon = koelschIcon; // Default
+                    let categories = [];
+                    
+                    if (kneipe.has_loeffe) categories.push('Löffe');
+                    if (kneipe.has_guinness) categories.push('Guinness');
+                    
+                    if (categories.length > 1) {
+                        icon = multiIcon; // Mehrere Angebote
+                    } else if (kneipe.has_guinness) {
+                        icon = guinnessIcon;
+                    } else if (kneipe.has_loeffe) {
+                        icon = loeffeIcon;
+                    }
+                    
+                    const marker = L.marker([kneipe.latitude, kneipe.longitude], { icon: icon }).addTo(map);
+                    
+                    const avgRating = calculateAverageRating(kneipe);
+                    const specialties = [];
+                    if (kneipe.has_loeffe) specialties.push('🟠 Löffe');
+                    if (kneipe.has_guinness) specialties.push('⚫ Guinness');
+                    if (kneipe.has_cuervo) specialties.push('🥃 Cuervo');
+                    
+                    const popupContent = `
+                        <div class="custom-popup">
+                            <div class="popup-title">${kneipe.name}</div>
+                            <div class="popup-address">${kneipe.address}</div>
+                            <div class="popup-rating">
+                                <span>⭐ ${avgRating.toFixed(1)}</span>
+                                <span>•</span>
+                                <span>${kneipe.koelschsorte || 'Unbekannt'}</span>
+                                <span>•</span>
+                                <span>${kneipe.koelschpreis ? kneipe.koelschpreis.toFixed(2) + '€' : '-'}</span>
+                            </div>
+                            ${specialties.length > 0 ? `
+                                <div style="margin: 0.5rem 0; font-size: 0.9rem;">
+                                    ${specialties.join(' • ')}
+                                </div>
+                            ` : ''}
+                            <button onclick="editKneipe(${kneipe.id})" class="btn btn-primary" style="margin-top: 0.5rem; font-size: 0.8rem; padding: 0.3rem 0.8rem;">
+                                Bearbeiten
+                            </button>
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                    markers.push(marker);
+                }
+            });
+        }
+
+        function updateStats() {
+            const koelschKneipen = kneipen.filter(k => !k.has_loeffe && !k.has_guinness);
+            const loeffeKneipen = kneipen.filter(k => k.has_loeffe);
+            const guinnessKneipen = kneipen.filter(k => k.has_guinness);
+            
+            // Update mit aktueller View
+            let currentCount;
+            switch(currentView) {
+                case 'koelsch':
+                    currentCount = koelschKneipen.length;
+                    break;
+                case 'loeffe':
+                    currentCount = loeffeKneipen.length;
+                    break;
+                case 'guinness':
+                    currentCount = guinnessKneipen.length;
+                    break;
+                default:
+                    currentCount = kneipen.length;
+            }
+            
+            document.getElementById('totalKneipen').textContent = currentCount;
+        }
+
+        function showView(viewName) {
+            currentView = viewName;
+            
+            // Hide all views
+            document.querySelectorAll('.view-container').forEach(view => {
+                view.classList.remove('active');
+            });
+            
+            // Show selected view
+            document.getElementById(viewName + 'View').classList.add('active');
+            
+            // Update button states
+            document.querySelectorAll('.nav-buttons .btn-secondary').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Aktiviere entsprechenden Button
+            const buttonMap = {
+                map: 'mapBtn',
+                koelsch: 'koelschBtn',
+                loeffe: 'loeffeBtn',
+                guinness: 'guinnessBtn'
+            };
+            
+            const activeBtn = document.getElementById(buttonMap[viewName]);
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+            
+            // Render content for list views
+            if (viewName !== 'map') {
+                renderKneipen(viewName);
+            }
+            
+            // Update stats for current view
+            updateStats();
+            
+            // If showing map, invalidate size to fix display issues
+            if (viewName === 'map') {
+                setTimeout(() => map.invalidateSize(), 100);
+            }
+        }
+
+        function openAddModal() {
+            if (!isConnected) {
+                showNotification('❌ Keine Datenbankverbindung. Bitte Setup durchführen.', 'error');
+                return;
+            }
+            
+            currentEditId = null;
+            resetForm();
+            document.getElementById('modalTitle').textContent = 'Kneipe hinzufügen';
+            document.getElementById('kneipenModal').style.display = 'block';
+        }
+
+        function editKneipe(id) {
+            const kneipe = kneipen.find(k => k.id === id);
+            if (!kneipe) return;
+            
+            currentEditId = id;
+            populateForm(kneipe);
+            document.getElementById('modalTitle').textContent = 'Kneipe bearbeiten';
+            document.getElementById('kneipenModal').style.display = 'block';
+        }
+
+        function populateForm(kneipe) {
+            document.getElementById('kneipeName').value = kneipe.name || '';
+            document.getElementById('kneipeAddress').value = kneipe.address || '';
+            document.getElementById('kneipeDescription').value = kneipe.description || '';
+            document.getElementById('koelschsorte').value = kneipe.koelschsorte || '';
+            document.getElementById('koelschpreis').value = kneipe.koelschpreis || '';
+            document.getElementById('imageUrl').value = kneipe.image_url || '';
+            
+            // Set ratings
+            ratings = { 
+                geschmack: kneipe.geschmack_rating || 0, 
+                musik: kneipe.musik_rating || 0 
+            };
+            Object.keys(ratings).forEach(ratingType => {
+                const container = document.querySelector(`[data-rating="${ratingType}"]`);
+                if (container) {
+                    updateStarDisplay(container, ratings[ratingType]);
+                }
+            });
+            
+            // Set toggles
+            toggles = { 
+                cuervo: kneipe.has_cuervo || false,
+                loeffe: kneipe.has_loeffe || false,
+                guinness: kneipe.has_guinness || false
+            };
+            Object.keys(toggles).forEach(toggleType => {
+                const button = document.querySelector(`[data-toggle="${toggleType}"]`);
+                if (button) {
+                    updateToggleDisplay(button, toggles[toggleType]);
+                }
+            });
+        }
+
+        function resetForm() {
+            document.getElementById('kneipenForm').reset();
+            
+            ratings = { geschmack: 0, musik: 0 };
+            document.querySelectorAll('.stars').forEach(container => {
+                updateStarDisplay(container, 0);
+            });
+            
+            toggles = { cuervo: false, loeffe: false, guinness: false };
+            document.querySelectorAll('.toggle-button').forEach(button => {
+                const toggleType = button.dataset.toggle;
+                updateToggleDisplay(button, false);
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('kneipenModal').style.display = 'none';
+            resetForm();
+            currentEditId = null;
+        }
+
+        function showOnMap(id) {
+            const kneipe = kneipen.find(k => k.id === id);
+            if (kneipe && kneipe.latitude && kneipe.longitude) {
+                showView('map');
+                map.setView([kneipe.latitude, kneipe.longitude], 16);
+                
+                const marker = markers.find(m => {
+                    const pos = m.getLatLng();
+                    return Math.abs(pos.lat - kneipe.latitude) < 0.001 && 
+                           Math.abs(pos.lng - kneipe.longitude) < 0.001;
+                });
+                
+                if (marker) {
+                    setTimeout(() => marker.openPopup(), 500);
+                }
+            }
+        }
+
+        function centerMapOnCologne() {
+            map.setView([50.9375, 6.9603], 12);
+        }
+
+        async function refreshData() {
+            if (isConnected) {
+                await loadKneipen();
+                showNotification('🔄 Daten aktualisiert', 'success');
+            }
+        }
+
+        function handleSearch(view) {
+            const searchInputId = `searchInput${view.charAt(0).toUpperCase() + view.slice(1)}`;
+            const searchTerm = document.getElementById(searchInputId).value.toLowerCase();
+            
+            // Basis-Filter je nach View
+            let baseKneipen;
+            switch(view) {
+                case 'koelsch':
+                    baseKneipen = kneipen.filter(k => !k.has_loeffe && !k.has_guinness);
+                    break;
+                case 'loeffe':
+                    baseKneipen = kneipen.filter(k => k.has_loeffe);
+                    break;
+                case 'guinness':
+                    baseKneipen = kneipen.filter(k => k.has_guinness);
+                    break;
+                default:
+                    baseKneipen = kneipen;
+            }
+            
+            const filteredKneipen = baseKneipen.filter(kneipe => 
+                kneipe.name.toLowerCase().includes(searchTerm) ||
+                kneipe.address.toLowerCase().includes(searchTerm) ||
+                (kneipe.koelschsorte && kneipe.koelschsorte.toLowerCase().includes(searchTerm)) ||
+                (kneipe.description && kneipe.description.toLowerCase().includes(searchTerm))
+            );
+            
+            renderKneipen(view, filteredKneipen);
+        }
+
+        // Setup Modal Functions
+        function showSetupModal() {
+            const savedUrl = localStorage.getItem('supabase_url');
+            const savedKey = localStorage.getItem('supabase_key');
+            
+            if (savedUrl) document.getElementById('supabaseUrl').value = savedUrl;
+            if (savedKey) document.getElementById('supabaseKey').value = savedKey;
+            
+            document.getElementById('setupModal').style.display = 'block';
+        }
+
+        function closeSetupModal() {
+            document.getElementById('setupModal').style.display = 'none';
+        }
+
+        async function saveSupabaseConfig() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            
+            if (!url || !key) {
+                showNotification('❌ Bitte beide Felder ausfüllen', 'error');
+                return;
+            }
+            
+            try {
+                // Save to localStorage
+                localStorage.setItem('supabase_url', url);
+                localStorage.setItem('supabase_key', key);
+                
+                // Initialize connection
+                await initializeSupabase(url, key);
+                
+                closeSetupModal();
+                showNotification('✅ Supabase erfolgreich konfiguriert!', 'success');
+                
+            } catch (error) {
+                showNotification('❌ Konfiguration fehlgeschlagen: ' + error.message, 'error');
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 3000;
+                padding: 1rem 1.5rem;
+                border-radius: 10px;
+                color: white;
+                font-weight: 600;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+                max-width: 400px;
+                ${type === 'success' ? 'background: var(--success-color);' : 
+                  type === 'warning' ? 'background: var(--warning-color);' : 
+                  type === 'error' ? 'background: var(--danger-color);' : 
+                  'background: var(--primary-gradient);'}
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+            }, 100);
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, type === 'error' ? 5000 : 3000);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 'n':
+                        e.preventDefault();
+                        openAddModal();
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        refreshData();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+  </html>
