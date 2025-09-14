@@ -1122,8 +1122,7 @@
                 }
                 if (e.ctrlKey && e.key === 'k') {
                     e.preventDefault();
-                    const activeSearchInput = document.querySelector(`#searchInput${currentView.charAt(0).toUpperCase() + currentView.slice(1)}`);
-                    if (activeSearchInput) activeSearchInput.focus();
+                    document.getElementById('searchInput').focus();
                 }
             });
         }
@@ -1877,4 +1876,4 @@
         });
     </script>
 </body>
-  </html>
+</html>
